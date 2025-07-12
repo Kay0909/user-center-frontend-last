@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Card, Avatar, Descriptions, Button, Form, Input, Select, message, Modal } from 'antd';
-import { useModel } from 'umi';
+import { useModel, request } from 'umi';
 
 const { Option } = Select;
 
@@ -9,6 +9,27 @@ const MyProfile: React.FC = () => {
   const user = initialState?.currentUser || {};
   const [modalVisible, setModalVisible] = useState(false);
   const [form] = Form.useForm();
+
+  // 页面加载时重新获取当前用户信息
+  useEffect(() => {
+    const fetchCurrentUser = async () => {
+      try {
+        const res = await request('/api/user/current', {
+          method: 'GET',
+        });
+        if (res.code === 0 && res.data) {
+          setInitialState({
+            ...initialState,
+            currentUser: res.data,
+          });
+        }
+      } catch (e) {
+        console.error('获取用户信息失败:', e);
+      }
+    };
+
+    fetchCurrentUser();
+  }, []);
 
   const handleEdit = () => {
     setModalVisible(true);
@@ -22,16 +43,38 @@ const MyProfile: React.FC = () => {
   const handleSave = async () => {
     try {
       const values = await form.validateFields();
-      setInitialState({
-        ...initialState,
-        currentUser: {
-          ...user,
-          ...values,
+      // 补充 id 字段
+      const updateData = { ...values, id: user.id };
+      const res = await request('/api/user/update', {
+        method: 'POST',
+        data: updateData,
+        headers: {
+          'Content-Type': 'application/json',
         },
       });
-      message.success('保存成功');
-      setModalVisible(false);
-    } catch (e) {}
+      if (res.code === 0 && res.data) {
+        // 重新获取最新的用户信息
+        try {
+          const userRes = await request('/api/user/current', {
+            method: 'GET',
+          });
+          if (userRes.code === 0 && userRes.data) {
+            setInitialState({
+              ...initialState,
+              currentUser: userRes.data,
+            });
+          }
+        } catch (e) {
+          console.error('获取用户信息失败:', e);
+        }
+        message.success('保存成功');
+        setModalVisible(false);
+      } else {
+        message.error(res.description || '保存失败');
+      }
+    } catch (e) {
+      message.error('保存失败，请重试');
+    }
   };
 
   return (
